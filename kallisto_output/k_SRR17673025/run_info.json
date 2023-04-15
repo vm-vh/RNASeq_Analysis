@@ -1,0 +1,13 @@
+{
+	"n_targets": 25574,
+	"n_bootstraps": 0,
+	"n_processed": 21653494,
+	"n_pseudoaligned": 17586873,
+	"n_unique": 17343232,
+	"p_pseudoaligned": 81.2,
+	"p_unique": 80.1,
+	"kallisto_version": "0.46.1",
+	"index_version": 10,
+	"start_time": "Sat Apr 15 01:46:11 2023",
+	"call": "kallisto quant -i Coffea_canephora.AUK_PRJEB4211_v1.cdna.all.index -o k_SRR17673025 --single -l 180 -s 20 SRR17673025.trim.fastq.gz"
+}

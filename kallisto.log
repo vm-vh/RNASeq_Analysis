@@ -1,0 +1,95 @@
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673024.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 21,608,233 reads, 17,305,005 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 856 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673025.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 21,653,494 reads, 17,586,873 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 885 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673026.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 22,602,514 reads, 18,042,723 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 292 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673027.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 22,635,326 reads, 18,578,283 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 807 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673030.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 22,544,989 reads, 18,977,269 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 343 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673031.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 22,563,989 reads, 19,302,594 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 760 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673032.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 22,013,825 reads, 18,362,021 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 981 rounds
+
+[quant] fragment length distribution is truncated gaussian with mean = 180, sd = 20
+[index] k-mer length: 31
+[index] number of targets: 25,574
+[index] number of k-mers: 40,670,892
+[index] number of equivalence classes: 64,060
+[quant] running in single-end mode
+[quant] will process file 1: SRR17673033.trim.fastq.gz
+[quant] finding pseudoalignments for the reads ... done
+[quant] processed 22,057,722 reads, 18,951,363 reads pseudoaligned
+[   em] quantifying the abundances ... done
+[   em] the Expectation-Maximization algorithm ran for 821 rounds
