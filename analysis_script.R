@@ -1,0 +1,205 @@
+Sys.unsetenv("R_LIBS_USER")
+.libPaths(paste(getwd(), "temp/RLibrary", sep="/"))
+
+# step 1
+library(tidyverse) # provides access to Hadley Wickham's collection of R packages for data science
+library(tximport) # package for getting Kallisto results into R
+library(ensembldb) # helps deal with ensembl
+library(biomaRt) # annotations
+
+targets <- read_tsv("study_design.txt")# read in your study design
+path <- file.path("kallisto_output",targets$sra_accession, "abundance.tsv") # set file paths to your mapped data
+all(file.exists(path)) 
+
+myMart <- useMart(biomart="plants_mart", host="https://plants.ensembl.org") # marts for plant genomes
+cof.anno <- useMart(biomart="plants_mart", dataset = "ccanephora_eg_gene", host="https://plants.ensembl.org")
+cof.attributes <- listAttributes(cof.anno)
+Tx.cof <- getBM(attributes=c('ensembl_transcript_id',
+                             'ensembl_gene_id', 'description'),
+                mart = cof.anno)
+Tx.cof <- as_tibble(Tx.cof) 
+Tx.cof <- dplyr::rename(Tx.cof, target_id = ensembl_transcript_id, gene_name = ensembl_gene_id)
+Tx.cof <- dplyr::select(Tx.cof, "target_id", "gene_name")
+
+Txi_gene <- tximport(path, 
+                     type = "kallisto", 
+                     tx2gene = Tx.cof, 
+                     txOut = FALSE, #determines whether your data represented at transcript or gene level
+                     countsFromAbundance = "lengthScaledTPM",
+                     ignoreTxVersion = TRUE)
+
+# step 2
+library(tidyverse)
+library(edgeR) # package for differential expression analysis, here only used for the DGEList object and for normalization methods
+library(matrixStats)
+library(cowplot)
+
+sampleLabels <- targets$sample
+myDGEList <- DGEList(Txi_gene$counts)
+log2.cpm <- cpm(myDGEList, log=TRUE)
+
+log2.cpm.df <- as_tibble(log2.cpm, rownames = "geneID")
+colnames(log2.cpm.df) <- c("geneID", sampleLabels)
+log2.cpm.df.pivot <- pivot_longer(log2.cpm.df, # dataframe to be pivoted
+                                  cols = L42:S31, # column names to be stored as a SINGLE variable
+                                  names_to = "samples", # name of that new variable (column)
+                                  values_to = "expression") # name of new variable (column) storing all the values (data)
+
+p1 <- ggplot(log2.cpm.df.pivot) +
+  aes(x=samples, y=expression, fill=samples) +
+  geom_violin(trim = FALSE, show.legend = FALSE) +
+  stat_summary(fun = "median", 
+               geom = "point", 
+               shape = 95, 
+               size = 10, 
+               color = "black", 
+               show.legend = FALSE) +
+  labs(y="log2 expression", x = "sample",
+       title="Log2 Counts per Million (CPM)",
+       subtitle="unfiltered, non-normalized",
+       caption=paste0("produced on ", Sys.time())) +
+  theme_bw()
+
+cpm <- cpm(myDGEList)
+keepers <- rowSums(cpm>1)>=5 #user defined
+myDGEList.filtered <- myDGEList[keepers,]
+
+log2.cpm.filtered <- cpm(myDGEList.filtered, log=TRUE)
+log2.cpm.filtered.df <- as_tibble(log2.cpm.filtered, rownames = "geneID")
+colnames(log2.cpm.filtered.df) <- c("geneID", sampleLabels)
+log2.cpm.filtered.df.pivot <- pivot_longer(log2.cpm.filtered.df, # dataframe to be pivoted
+                                           cols = L42:S31, # column names to be stored as a SINGLE variable
+                                           names_to = "samples", # name of that new variable (column)
+                                           values_to = "expression") # name of new variable (column) storing all the values (data)
+
+p2 <- ggplot(log2.cpm.filtered.df.pivot) +
+  aes(x=samples, y=expression, fill=samples) +
+  geom_violin(trim = FALSE, show.legend = FALSE) +
+  stat_summary(fun = "median", 
+               geom = "point", 
+               shape = 95, 
+               size = 10, 
+               color = "black", 
+               show.legend = FALSE) +
+  labs(y="log2 expression", x = "sample",
+       title="Log2 Counts per Million (CPM)",
+       subtitle="filtered, non-normalized",
+       caption=paste0("produced on ", Sys.time())) +
+  theme_bw()
+
+myDGEList.filtered.norm <- calcNormFactors(myDGEList.filtered, method = "TMM")
+log2.cpm.filtered.norm <- cpm(myDGEList.filtered.norm, log=TRUE)
+log2.cpm.filtered.norm.df <- as_tibble(log2.cpm.filtered.norm, rownames = "geneID")
+colnames(log2.cpm.filtered.norm.df) <- c("geneID", sampleLabels)
+log2.cpm.filtered.norm.df.pivot <- pivot_longer(log2.cpm.filtered.norm.df, # dataframe to be pivoted
+                                                cols = L42:S31, # column names to be stored as a SINGLE variable
+                                                names_to = "samples", # name of that new variable (column)
+                                                values_to = "expression") # name of new variable (column) storing all the values (data)
+
+p3 <- ggplot(log2.cpm.filtered.norm.df.pivot) +
+  aes(x=samples, y=expression, fill=samples) +
+  geom_violin(trim = FALSE, show.legend = FALSE) +
+  stat_summary(fun = "median", 
+               geom = "point", 
+               shape = 95, 
+               size = 10, 
+               color = "black", 
+               show.legend = FALSE) +
+  labs(y="log2 expression", x = "sample",
+       title="Log2 Counts per Million (CPM)",
+       subtitle="filtered, TMM normalized",
+       caption=paste0("produced on ", Sys.time())) +
+  theme_bw()
+
+plot_grid(p1, p2, p3, labels = c('A', 'B', 'C'), label_size = 12)
+
+#step 3
+library(DT)
+library(gt)
+library(plotly)
+
+group <- targets$group
+group <- factor(group)
+
+pca.res <- prcomp(t(log2.cpm.filtered.norm), scale.=F, retx=T)
+pc.var <- pca.res$sdev^2 # sdev^2 captures these eigenvalues from the PCA result
+pc.per <- round(pc.var/sum(pc.var)*100, 1) 
+pca.res.df <- as_tibble(pca.res$x)
+pca.plot <- ggplot(pca.res.df) +
+  aes(x=PC1, y=PC2, label=sampleLabels, color = group) +
+  geom_point(size=4) +
+  stat_ellipse() +
+  xlab(paste0("PC1 (",pc.per[1],"%",")")) + 
+  ylab(paste0("PC2 (",pc.per[2],"%",")")) +
+  labs(title="PCA plot",
+       caption=paste0("produced on ", Sys.time())) +
+  coord_fixed() +
+  theme_bw()
+
+ggplotly(pca.plot)
+
+mydata.df <- mutate(log2.cpm.filtered.norm.df,
+                    leaf.AVG = (L42 + L41 + L32 + L31)/4, #healthy
+                    stem.AVG = (S42 + S41 + S32 + S31)/4,
+                    #now make columns comparing each of the averages above that you're interested in
+                    LogFC = (stem.AVG - leaf.AVG)) %>% #note that this is the first time you've seen the 'pipe' operator
+  mutate_if(is.numeric, round, 2)
+
+datatable(mydata.df[,c(1,10:12)], 
+          extensions = c('KeyTable', "FixedHeader"), 
+          filter = 'top',
+          options = list(keys = TRUE, 
+                         searchHighlight = TRUE, 
+                         pageLength = 10, 
+                         #dom = "Blfrtip", 
+                         #buttons = c("copy", "csv", "excel"),
+                         lengthMenu = c("10", "25", "50", "100")))
+
+# step 4
+library(limma)
+library(edgeR)
+library(gt)
+library(DT)
+library(plotly)
+
+group <- factor(targets$group)
+design <- model.matrix(~0 + group)
+colnames(design) <- levels(group)
+
+v.DEGList.filtered.norm <- voom(myDGEList.filtered.norm, design, plot = FALSE)
+fit <- lmFit(v.DEGList.filtered.norm, design)
+contrast.matrix <- makeContrasts(infection = stem - leaf,
+                                 levels=design)
+
+fits <- contrasts.fit(fit, contrast.matrix)
+ebFit <- eBayes(fits)
+myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=40000, sort.by="logFC")
+myTopHits.df <- myTopHits %>%
+  as_tibble(rownames = "geneID")
+
+vplot <- ggplot(myTopHits) +
+  aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", myTopHits$geneID)) +
+  geom_point(size=2) +
+  geom_hline(yintercept = -log10(0.01), linetype="longdash", colour="grey", linewidth=1) +
+  geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", linewidth=1) +
+  geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", linewidth=1) +
+  #annotate("rect", xmin = 1, xmax = 12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#BE684D") +
+  #annotate("rect", xmin = -1, xmax = -12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#2C467A") +
+  labs(title="Volcano plot",
+       subtitle = "Cutaneous leishmaniasis",
+       caption=paste0("produced on ", Sys.time())) +
+  theme_bw()
+
+ggplotly(vplot)
+
+results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05, lfc=1)
+colnames(v.DEGList.filtered.norm$E) <- sampleLabels
+diffGenes <- v.DEGList.filtered.norm$E[results[,1] !=0,]
+diffGenes.df <- as_tibble(diffGenes, rownames = "geneID")
+datatable(diffGenes.df,
+          extensions = c('KeyTable', "FixedHeader"),
+          caption = 'Table 1: DEGs in cutaneous leishmaniasis',
+          options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
+  formatRound(columns=c(2:9), digits=2)
+
+
