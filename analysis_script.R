@@ -1,12 +1,35 @@
 Sys.unsetenv("R_LIBS_USER")
 .libPaths(paste(getwd(), "temp/RLibrary", sep="/"))
 
-# step 1
+# load all required libraries
 library(tidyverse) # provides access to Hadley Wickham's collection of R packages for data science
 library(tximport) # package for getting Kallisto results into R
 library(ensembldb) # helps deal with ensembl
 library(biomaRt) # annotations
 
+library(edgeR) # package for differential expression analysis, here only used for the DGEList object and for normalization methods
+library(matrixStats)
+library(cowplot)
+
+library(DT) # interactive and searchable tables of GSEA results
+library(gt)
+library(plotly)
+
+library(limma)
+
+library(gplots) #for heatmaps
+library(GSEABase) #functions and methods for Gene Set Enrichment Analysis
+library(Biobase) #base functions for bioconductor; required by GSEABase
+library(GSVA) #Gene Set Variation Analysis, a non-parametric and unsupervised method for estimating variation of gene set enrichment across samples.
+library(gprofiler2) #tools for accessing the GO enrichment results using g:Profiler web resources
+# library(clusterProfiler) # provides a suite of tools for functional enrichment analysis
+library(msigdbr) # access to msigdb collections directly within R
+# library(enrichplot) # great for making the standard GSEA enrichment plots
+# library(qusage) # Quantitative Set Analysis for Gene Expression
+library(heatmaply)
+
+
+# step 1
 targets <- read_tsv("study_design.txt")# read in your study design
 path <- file.path("kallisto_output",targets$sra_accession, "abundance.tsv") # set file paths to your mapped data
 all(file.exists(path)) 
@@ -29,11 +52,6 @@ Txi_gene <- tximport(path,
                      ignoreTxVersion = TRUE)
 
 # step 2
-library(tidyverse)
-library(edgeR) # package for differential expression analysis, here only used for the DGEList object and for normalization methods
-library(matrixStats)
-library(cowplot)
-
 sampleLabels <- targets$sample
 myDGEList <- DGEList(Txi_gene$counts)
 log2.cpm <- cpm(myDGEList, log=TRUE)
@@ -114,10 +132,6 @@ p3 <- ggplot(log2.cpm.filtered.norm.df.pivot) +
 plot_grid(p1, p2, p3, labels = c('A', 'B', 'C'), label_size = 12)
 
 #step 3
-library(DT)
-library(gt)
-library(plotly)
-
 group <- targets$group
 group <- factor(group)
 
@@ -155,13 +169,8 @@ datatable(mydata.df[,c(1,10:12)],
                          #buttons = c("copy", "csv", "excel"),
                          lengthMenu = c("10", "25", "50", "100")))
 
-# step 4
-library(limma)
-library(edgeR)
-library(gt)
-library(DT)
-library(plotly)
 
+# step 4
 group <- factor(targets$group)
 design <- model.matrix(~0 + group)
 colnames(design) <- levels(group)
@@ -202,4 +211,90 @@ datatable(diffGenes.df,
           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
   formatRound(columns=c(2:9), digits=2)
 
+# step X modules
+library(tidyverse)
+library(gplots)
+library(RColorBrewer)
+myheatcolors <- rev(brewer.pal(name="RdBu", n=11))
+clustRows <- hclust(as.dist(1-cor(t(diffGenes), method="pearson")), method="complete") #cluster rows by pearson correlation
+clustColumns <- hclust(as.dist(1-cor(diffGenes, method="spearman")), method="complete")
+module.assign <- cutree(clustRows, k=2)
+module.color <- rainbow(length(unique(module.assign)), start=0.1, end=0.9) 
+module.color <- module.color[as.vector(module.assign)] 
+heatmap.2(diffGenes, 
+          Rowv=as.dendrogram(clustRows), 
+          Colv=as.dendrogram(clustColumns),
+          RowSideColors=module.color,
+          col=myheatcolors, scale='row', labRow=NA,
+          density.info="none", trace="none",  
+          cexRow=1, cexCol=1, margins=c(8,20))
 
+modulePick <- 2 
+myModule_up <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
+hrsub_up <- hclust(as.dist(1-cor(t(myModule_up), method="pearson")), method="complete") 
+
+heatmap.2(myModule_up, 
+          Rowv=as.dendrogram(hrsub_up), 
+          Colv=NA, 
+          labRow = NA,
+          col=myheatcolors, scale="row", 
+          density.info="none", trace="none", 
+          RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
+
+modulePick <- 1 
+myModule_down <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
+hrsub_down <- hclust(as.dist(1-cor(t(myModule_down), method="pearson")), method="complete") 
+
+heatmap.2(myModule_down, 
+          Rowv=as.dendrogram(hrsub_down), 
+          Colv=NA, 
+          labRow = NA,
+          col=myheatcolors, scale="row", 
+          density.info="none", trace="none", 
+          RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
+
+# step 5
+gost.res_up <- gost(rownames(myModule_up), organism = "ccanephora", correction_method = "fdr")
+gostplot(gost.res_up, interactive = T, capped = T) #set interactive=FALSE to get plot for publications
+gost.res_down <- gost(rownames(myModule_down), organism = "ccanephora", correction_method = "fdr")
+gostplot(gost.res_down, interactive = T, capped = T) #set interactive=FALSE to get plot for publications
+
+hs_gsea_c2 <- msigdbr(species = "Coffea canephora", # change depending on species your data came from
+                      category = "C2") %>% # choose your msigdb collection of interest
+  dplyr::select(gs_name, gene_symbol) #just get the columns corresponding to signature name and gene symbols of genes in each signature 
+
+# Now that you have your msigdb collections ready, prepare your data
+# grab the dataframe you made in step3 script
+# Pull out just the columns corresponding to gene symbols and LogFC for at least one pairwise comparison for the enrichment analysis
+mydata.df.sub <- dplyr::select(mydata.df, geneID, LogFC)
+mydata.gsea <- mydata.df.sub$LogFC
+names(mydata.gsea) <- as.character(mydata.df.sub$geneID)
+mydata.gsea <- sort(mydata.gsea, decreasing = TRUE)
+
+# run GSEA using the 'GSEA' function from clusterProfiler
+myGSEA.res <- GSEA(mydata.gsea, TERM2GENE=hs_gsea_c2, verbose=FALSE)
+myGSEA.df <- as_tibble(myGSEA.res@result)
+
+# view results as an interactive table
+datatable(myGSEA.df, 
+          extensions = c('KeyTable', "FixedHeader"), 
+          caption = 'Signatures enriched in leishmaniasis',
+          options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
+  formatRound(columns=c(3:10), digits=2)
+# create enrichment plots using the enrichplot package
+gseaplot2(myGSEA.res, 
+          geneSetID = 47, #can choose multiple signatures to overlay in this plot
+          pvalue_table = FALSE, #can set this to FALSE for a cleaner plot
+          title = myGSEA.res$Description[47]) #can also turn off this title
+
+# add a variable to this result that matches enrichment direction with phenotype
+myGSEA.df <- myGSEA.df %>%
+  mutate(phenotype = case_when(
+    NES > 0 ~ "disease",
+    NES < 0 ~ "healthy"))
+
+# create 'bubble plot' to summarize y signatures across x phenotypes
+ggplot(myGSEA.df[1:20,], aes(x=phenotype, y=ID)) + 
+  geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
+  scale_color_gradient(low="blue", high="red") +
+  theme_bw()
