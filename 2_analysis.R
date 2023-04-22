@@ -20,13 +20,14 @@ library(plotly)
 
 library(limma)
 
+library(gprofiler2)
+
 library(gplots) #for heatmaps
 library(GSEABase) #functions and methods for Gene Set Enrichment Analysis
 library(Biobase) #base functions for bioconductor; required by GSEABase
 library(GSVA) #Gene Set Variation Analysis, a non-parametric and unsupervised method for estimating variation of gene set enrichment across samples.
 library(gprofiler2) #tools for accessing the GO enrichment results using g:Profiler web resources
 # library(clusterProfiler) # provides a suite of tools for functional enrichment analysis
-library(msigdbr) # access to msigdb collections directly within R
 # library(enrichplot) # great for making the standard GSEA enrichment plots
 # library(qusage) # Quantitative Set Analysis for Gene Expression
 library(heatmaply)
@@ -91,6 +92,9 @@ myplot <- ggplot(mydata.df) +
 ggplotly(myplot)
 
 
+# WIP --------------------------------------------------------------------------------------------------------------------------------------
+
+
 # step 4 - identify differentially expressed genes (DEGs) and differential transcript usage (DTU)
 group <- factor(targets$group)
 design <- model.matrix(~0 + group)
@@ -136,6 +140,51 @@ datatable(diffGenes.df,
           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
   formatRound(columns=c(2:9), digits=2)
 
+
+# step 5: Enrichment
+# Gene Ontology (GO) enrichment using gProfiler2
+myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=50, sort.by="logFC") # pick the top genes for carrying out GO enrichment analysis
+gost.res <- gost(rownames(myTopHits), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
+gostplot(gost.res, interactive = T, capped = F) # produce an interactive manhattan plot of enriched GO terms
+mygostplot <- gostplot(gost.res, interactive = F, capped = F) #set interactive=FALSE to get plot for publications
+publish_gostplot(
+  mygostplot, #your static gostplot from above
+  highlight_terms = c("GO:0048046", "GO:0005576", "GO:0030145", "GO:0045735", "GO:0046872"), # top 5
+  filename = NULL,
+  width = NA,
+  height = NA)
+
+#you can also generate a table of your gost results
+publish_gosttable(
+  gost.res,
+  highlight_terms = NULL,
+  use_colors = TRUE,
+  show_columns = c("source", "term_name", "term_size", "intersection_size"),
+  filename = NULL,
+  ggplot=TRUE)
+
+# now repeat the above steps using only genes from a single module from the step 6 script, by using `rownames(myModule)`
+# what is value in breaking up DEGs into modules for functional enrichment analysis?
+
+
+# Competitive GSEA using CAMERA----
+# for competitive tests the null hypothesis is that genes in the set are, at most, as often differentially expressed as genes outside the set
+# first let's create a few signatures to test in our enrichment analysis
+mySig <- rownames(myTopHits) 
+mySig2 <- sample((rownames(v.DEGList.filtered.norm$E)), size = 50, replace = FALSE)
+collection <- list(real = mySig, fake = mySig2)
+# now test for enrichment using CAMERA
+camera.res <- camera(v.DEGList.filtered.norm$E, collection, design, contrast.matrix[,1]) 
+camera.df <- as_tibble(camera.res, rownames = "setName")
+camera.df
+
+# Self-contained GSEA using ROAST----
+# remember that for self-contained the null hypothesis is that no genes in the set are differentially expressed
+mroast(v.DEGList.filtered.norm$E, collection, design, contrast=1) #mroast adjusts for multiple testing
+
+
+
+# -----------------------------------------------------------------------------------------------------------------------------------------------
 # step X modules
 library(tidyverse)
 library(gplots)
@@ -177,6 +226,7 @@ heatmap.2(myModule_down,
           col=myheatcolors, scale="row", 
           density.info="none", trace="none", 
           RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
+
 
 # step 5
 gost.res_up <- gost(rownames(myModule_up), organism = "ccanephora", correction_method = "fdr")
