@@ -15,20 +15,7 @@ library(reshape2)
 library(heatmaply) # for heatmaps
 library(gplots) 
 library(gprofiler2) # tools for accessing the GO enrichment results using g:Profiler web resources
-
-# library(clusterProfiler) # provides a suite of tools for functional enrichment analysis
-
-# library(biomaRt) # annotations
-# library(matrixStats)
-# library(cowplot)
-# library(GSEABase) #functions and methods for Gene Set Enrichment Analysis
-# library(Biobase) #base functions for bioconductor; required by GSEABase
-# library(GSVA) #Gene Set Variation Analysis, a non-parametric and unsupervised method for estimating variation of gene set enrichment across samples.
-# library(msigdbr) # access to msigdb collections directly within R
-# library(enrichplot) # great for making the standard GSEA enrichment plots
-# library(qusage) # Quantitative Set Analysis for Gene Expression
-# library(heatmaply)
-
+library(RColorBrewer)
 
 #step 3: data exploration
 
@@ -118,8 +105,8 @@ ebFit <- eBayes(fits) # get bayesian stats for your linear model fit
 # TopTable to view DEGs
 myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=18668, sort.by="logFC")
 myTopHits.df <- myTopHits %>% as_tibble(rownames = "geneID")
-gt(myTopHits.df)
-
+myTopHitsgt <- data.frame(gt(myTopHits.df))
+# write_tsv(myTopHitsgt,"myTopHits.txt")
 
 vplot <- ggplot(myTopHits) +
   aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", rownames(myTopHits))) +
@@ -127,8 +114,8 @@ vplot <- ggplot(myTopHits) +
   geom_hline(yintercept = -log10(0.01), linetype="longdash", colour="grey", linewidth=1) +
   geom_vline(xintercept = 1, linetype="longdash", colour="#BE684D", linewidth=1) +
   geom_vline(xintercept = -1, linetype="longdash", colour="#2C467A", linewidth=1) +
-  annotate("rect", xmin = 1, xmax = 12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#BE684D") +
-  annotate("rect", xmin = -1, xmax = -12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#2C467A") +
+  # annotate("rect", xmin = 1, xmax = 12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#BE684D") +
+  # annotate("rect", xmin = -1, xmax = -12, ymin = -log10(0.01), ymax = 7.5, alpha=.2, fill="#2C467A") +
   labs(title="Volcano plot",
        subtitle = "C. canephora",
        caption=paste0("produced on ", Sys.time())) +
@@ -148,67 +135,94 @@ datatable(diffGenes.df,
 # write_tsv(diffGenes.df,"DiffGenes.txt")
 
 
-
-# WIP --------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-# heatmap?
-hm <- heatmaply(diffGenes.df[2:9], 
-                #dendrogram = "row",
-                xlab = "Samples", ylab = "DEGs", 
-                main = "DEGs in c. canephora",
-                scale = "column",
-                margins = c(60,100,40,20),
-                grid_color = "white",
-                grid_width = 0.0000001,
-                titleX = T,
-                titleY = T,
-                hide_colorbar = TRUE,
-                branches_lwd = 0.1,
-                label_names = c("Gene", "Sample:", "Value"),
-                fontsize_row = 5, fontsize_col = 5,
-                labCol = colnames(diffGenes.df)[2:9],
-                labRow = diffGenes.df$geneID,
-                heatmap_layers = theme(axis.line=element_blank()))
-hm
-
-
-
 # step 5
 
 # Gene Ontology (GO) enrichment using gProfiler2
-myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=50, sort.by="logFC") # pick the top genes for carrying out GO enrichment analysis
-gost.res <- gost(rownames(myTopHits), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
-gostplot(gost.res, interactive = T, capped = F) # produce an interactive manhattan plot of enriched GO terms
-mygostplot <- gostplot(gost.res, interactive = F, capped = F) #set interactive=FALSE to get plot for publications
-publish_gostplot(
-  mygostplot, #your static gostplot from above
-  highlight_terms = c("GO:0048046", "GO:0005576", "GO:0030145", "GO:0045735", "GO:0046872"), # top 5
-  filename = NULL,
-  width = NA,
-  height = NA)
+# using myTopHits
+myTop100Hits <- topTable(ebFit, adjust ="BH", coef=1, number=100, sort.by="logFC") # pick the top genes for carrying out GO enrichment analysis
 
-#you can also generate a table of your gost results
-publish_gosttable(
-  gost.res,
-  highlight_terms = NULL,
-  use_colors = TRUE,
-  show_columns = c("source", "term_name", "term_size", "intersection_size"),
-  filename = NULL,
-  ggplot=TRUE)
+# myTop5Hits_logFC <- topTable(ebFit, adjust ="BH", coef=1, number=5, sort.by="logFC")
+# myTop5Hits_logFC
+# myTop5Hits_p <- topTable(ebFit, adjust ="BH", coef=1, number=5, sort.by="P")
+# myTop5Hits_p
 
-# now repeat the above steps using only genes from a single module from the step 6 script, by using `rownames(myModule)`
-# what is value in breaking up DEGs into modules for functional enrichment analysis?
+gost.res <- gost(rownames(myTop100Hits), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
+ordered.gost.res <- gost.res$result[order(gost.res$result$p_value, decreasing = F),][1:7]
+gostplot(gost.res, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
+
+# save gost plot and table
+# publish_gostplot(
+#    gostplot(gost.res, interactive = F, capped = F), # static gostplot
+#    highlight_terms = c("GO:0005975", "GO:0048046", "GO:0030145", "GO:0003824", "GO:0045735"), # highlight top 7 lowest p-values
+#    filename = "gostplot100.png",
+#    width = NA,
+#    height = NA)
+# 
+# publish_gosttable(
+#    gost.res$result[order(gost.res$result$p_value, decreasing = F),],
+#    highlight_terms = NULL,
+#    use_colors = TRUE,
+#    show_columns = c("source", "term_name", "term_size", "intersection_size"),
+#    filename = "gosttable100.pdf",
+#    ggplot=TRUE)
 
 
-# step X modules
-library(RColorBrewer)
-# heatmap
-myheatcolors <- rev(brewer.pal(name="RdBu", n=11))
-clustRows <- hclust(as.dist(1-cor(t(diffGenes), method="pearson")), method="complete") #cluster rows by pearson correlation
+# step X
+
+clustRows <- hclust(as.dist(1-cor(t(diffGenes), method="pearson")), method="complete") # cluster rows by pearson correlation
 clustColumns <- hclust(as.dist(1-cor(diffGenes, method="spearman")), method="complete")
 module.assign <- cutree(clustRows, k=2) # assign 
+
+modulePick <- 2 
+myModule_up <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
+length(rownames(myModule_up)) # 3355
+
+gost.res.up <- gost(rownames(myModule_up), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
+gostplot(gost.res.up, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
+
+# save gost plot and table
+# publish_gostplot(
+#   gostplot(gost.res.up, interactive = F, capped = F), # static gostplot
+#   highlight_terms = c("GO:0009536", "GO:0009579", "GO:0009507", "GO:0015979", "GO:0034357"), # highlight top 5
+#   filename = "gostplot_up.png",
+#   width = NA,
+#   height = NA)
+# 
+# publish_gosttable(
+#   gost.res.up$result[order(gost.res.up$result$p_value, decreasing = F),],
+#   highlight_terms = NULL,
+#   use_colors = TRUE,
+#   show_columns = c("source", "term_name", "term_size", "intersection_size"),
+#   filename = "gosttable_up.pdf",
+#   ggplot=TRUE)
+
+modulePick <- 1 
+myModule_down <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
+length(rownames(myModule_down)) # 3530
+
+gost.res.down <- gost(rownames(myModule_down), organism = "ccanephora", ordered_query = T, correction_method = "fdr") # run GO enrichment analysis
+gostplot(gost.res.down, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
+
+# save gost plot and table
+# publish_gostplot(
+#    gostplot(gost.res.down, interactive = F, capped = F), # static gostplot
+#    highlight_terms = c("GO:0008017", "GO:0015631", "GO:0008092", "GO:0003777", "GO:0003774"), # highlight top 7
+#    filename = "gostplot_down.png",
+#    width = NA,
+#    height = NA)
+# 
+# publish_gosttable(
+#    gost.res.down$result[order(gost.res.down$result$p_value, decreasing = F),],
+#    highlight_terms = NULL,
+#    use_colors = TRUE,
+#    show_columns = c("source", "term_name", "term_size", "intersection_size"),
+#    filename = "gosttable_down.pdf",
+#    ggplot= T)
+
+
+
+# heatmaps
+myheatcolors <- rev(brewer.pal(name="RdBu", n=11))
 module.color <- rainbow(length(unique(module.assign)), start=0.1, end=0.9) 
 module.color <- module.color[as.vector(module.assign)] 
 heatmap.2(diffGenes, 
@@ -242,50 +256,3 @@ heatmap.2(myModule_down,
           col=myheatcolors, scale="row", 
           density.info="none", trace="none", 
           RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
-
-
-# step 5
-gost.res_up <- gost(rownames(myModule_up), organism = "ccanephora", correction_method = "fdr")
-gostplot(gost.res_up, interactive = T, capped = T) #set interactive=FALSE to get plot for publications
-gost.res_down <- gost(rownames(myModule_down), organism = "ccanephora", correction_method = "fdr")
-gostplot(gost.res_down, interactive = T, capped = T) #set interactive=FALSE to get plot for publications
-
-hs_gsea_c2 <- msigdbr(species = "Coffea canephora", # change depending on species your data came from
-                      category = "C2") %>% # choose your msigdb collection of interest
-  dplyr::select(gs_name, gene_symbol) #just get the columns corresponding to signature name and gene symbols of genes in each signature 
-
-# Now that you have your msigdb collections ready, prepare your data
-# grab the dataframe you made in step3 script
-# Pull out just the columns corresponding to gene symbols and LogFC for at least one pairwise comparison for the enrichment analysis
-mydata.df.sub <- dplyr::select(mydata.df, geneID, LogFC)
-mydata.gsea <- mydata.df.sub$LogFC
-names(mydata.gsea) <- as.character(mydata.df.sub$geneID)
-mydata.gsea <- sort(mydata.gsea, decreasing = TRUE)
-
-# run GSEA using the 'GSEA' function from clusterProfiler
-myGSEA.res <- GSEA(mydata.gsea, TERM2GENE=hs_gsea_c2, verbose=FALSE)
-myGSEA.df <- as_tibble(myGSEA.res@result)
-
-# view results as an interactive table
-datatable(myGSEA.df, 
-          extensions = c('KeyTable', "FixedHeader"), 
-          caption = 'Signatures enriched in leishmaniasis',
-          options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
-  formatRound(columns=c(3:10), digits=2)
-# create enrichment plots using the enrichplot package
-gseaplot2(myGSEA.res, 
-          geneSetID = 47, #can choose multiple signatures to overlay in this plot
-          pvalue_table = FALSE, #can set this to FALSE for a cleaner plot
-          title = myGSEA.res$Description[47]) #can also turn off this title
-
-# add a variable to this result that matches enrichment direction with phenotype
-myGSEA.df <- myGSEA.df %>%
-  mutate(phenotype = case_when(
-    NES > 0 ~ "disease",
-    NES < 0 ~ "healthy"))
-
-# create 'bubble plot' to summarize y signatures across x phenotypes
-ggplot(myGSEA.df[1:20,], aes(x=phenotype, y=ID)) + 
-  geom_point(aes(size=setSize, color = NES, alpha=-log10(p.adjust))) +
-  scale_color_gradient(low="blue", high="red") +
-  theme_bw()
