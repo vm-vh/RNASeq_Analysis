@@ -11,15 +11,12 @@ library(edgeR) # package for differential expression analysis, here only used fo
 library(matrixStats)
 library(cowplot)
 
-# step 1: import studydesign and kallisto transcript counts and turn into list with gene IDs through ensmbl annotations
-targets <- read_tsv("study_design.txt")# read in study design
+# step 1
 
-path <- file.path("kallisto_output",targets$sra_accession, "abundance.tsv") # set file paths to mapped data
-all(file.exists(path)) # check to see if path worked
-
+# import ensembl annotations and format
 myMart <- useMart(biomart="plants_mart", host="https://plants.ensembl.org") # marts for plant genomes
 cof.anno <- useMart(biomart="plants_mart", dataset = "ccanephora_eg_gene", host="https://plants.ensembl.org") # load ensembl annotations for c. canephora
-# cof.attributes <- listAttributes(cof.anno) 
+# listAttributes(cof.anno) 
 Tx.cof <- getBM(attributes=c('ensembl_transcript_id',
                              'ensembl_gene_id', 'description'),
                 mart = cof.anno) # turn it into a table
@@ -27,7 +24,11 @@ Tx.cof <- as_tibble(Tx.cof)
 Tx.cof <- dplyr::rename(Tx.cof, target_id = ensembl_transcript_id, gene_name = ensembl_gene_id) # rename the two columns from biomart
 Tx.cof <- dplyr::select(Tx.cof, "target_id", "gene_name") # set transcript ID as the first column
 
-# import Kallisto transcript counts
+
+# import a study design file and Kallisto transcript counts
+targets <- read_tsv("study_design.txt")# read in study design
+path <- file.path("kallisto_output",targets$sra_accession, "abundance.tsv") # set file paths to mapped data
+# all(file.exists(path)) check to see if path worked, should be TRUE
 Txi_gene <- tximport(path, 
                      type = "kallisto", 
                      tx2gene = Tx.cof, # Mapping of transcript IDs to gene IDs 
@@ -37,7 +38,8 @@ Txi_gene <- tximport(path,
 
 
 
-# step 2: filter and normalize data, tidy up gene expression data
+# step 2: filter, normalize data and tidy up data
+
 # visualization of abundances
 myTPM <- Txi_gene$abundance
 myTPM.stats <- transform(myTPM, 
@@ -54,9 +56,8 @@ ggplot(myTPM.stats) +
        caption="DIYtranscriptomics - Spring 2020") +
   theme_bw()
 
-sampleLabels <- targets$sample
-
 # looking at counts
+sampleLabels <- targets$sample
 myDGEList <- DGEList(Txi_gene$counts)
 log2.cpm <- cpm(myDGEList, log=TRUE) # use 'cpm' function to get counts per million
 log2.cpm.df <- as_tibble(log2.cpm, rownames = "geneID")
@@ -107,7 +108,7 @@ p2 <- ggplot(log2.cpm.filtered.df.pivot) +
                size = 10, 
                color = "black", 
                show.legend = FALSE) +
-  labs(y="log2 expression", x = "sample",
+  labs(y="log2 expression", x = "samples",
        title="Log2 Counts per Million (CPM)",
        subtitle="filtered, non-normalized",
        caption=paste0("produced on ", Sys.time())) +
@@ -132,10 +133,10 @@ p3 <- ggplot(log2.cpm.filtered.norm.df.pivot) +
                size = 10, 
                color = "black", 
                show.legend = FALSE) +
-  labs(y="log2 expression", x = "sample",
+  labs(y="log2 expression", x = "samples",
        title="Log2 Counts per Million (CPM)",
        subtitle="filtered, TMM normalized",
        caption=paste0("produced on ", Sys.time())) +
   theme_bw()
 
-plot_grid(p1, p2, p3, labels = c('A', 'B', 'C'), label_size = 12)
+plot_grid(p1, p2, p3) #, labels = c('A', 'B', 'C'), label_size = 12)
