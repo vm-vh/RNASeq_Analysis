@@ -1,4 +1,4 @@
-# This script is for clustering RNASeq data, 
+# This script is for clustering RNASeq data,
 # Please run the import_filter_norm.R script BEFORE this one to ensure all necessary variables are defined.
 
 Sys.unsetenv("R_LIBS_USER")
@@ -64,6 +64,7 @@ mydata.df <- mutate(log2.cpm.filtered.norm.df,
                     LogFC = (stem.AVG - leaf.AVG)) %>% #note that this is the first time you've seen the 'pipe' operator
   mutate_if(is.numeric, round, 2)
 
+write_tsv(mydata.df[,c(1,10:12)], "avg.tsv")
 datatable(mydata.df[,c(1,10:12)], 
           extensions = c('KeyTable', "FixedHeader"), 
           filter = 'top',
@@ -85,6 +86,7 @@ ggplotly(myplot)
 
 
 # step 4 - identify differentially expressed genes (DEGs) and differential transcript usage (DTU)
+
 group <- factor(targets$group)
 design <- model.matrix(~0 + group)
 colnames(design) <- levels(group)
@@ -127,12 +129,12 @@ results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05,
 colnames(v.DEGList.filtered.norm$E) <- sampleLabels
 diffGenes <- v.DEGList.filtered.norm$E[results[,1] !=0,] # E = numeric matrix of normalized expression values on the log2 scale
 diffGenes.df <- as_tibble(diffGenes, rownames = "geneID")
+# write_tsv(diffGenes.df,"DiffGenes.tsv")
 datatable(diffGenes.df,
           extensions = c('KeyTable', "FixedHeader"),
           caption = 'Table 1: DEGs in c. canephora',
           options = list(keys = TRUE, searchHighlight = TRUE, pageLength = 10, lengthMenu = c("10", "25", "50", "100"))) %>%
   formatRound(columns=c(2:9), digits=2)
-# write_tsv(diffGenes.df,"DiffGenes.txt")
 
 
 # step 5
@@ -143,12 +145,9 @@ myTop100Hits <- topTable(ebFit, adjust ="BH", coef=1, number=100, sort.by="logFC
 
 # myTop5Hits_logFC <- topTable(ebFit, adjust ="BH", coef=1, number=5, sort.by="logFC")
 # myTop5Hits_logFC
-# myTop5Hits_p <- topTable(ebFit, adjust ="BH", coef=1, number=5, sort.by="P")
-# myTop5Hits_p
 
 gost.res <- gost(rownames(myTop100Hits), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
-ordered.gost.res <- gost.res$result[order(gost.res$result$p_value, decreasing = F),][1:7]
-gostplot(gost.res, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
+gostplot(gost.res, interactive = T, capped = F) #, c(`GO:MF` = "darkgreen", `GO:BP` = "green", `GO:CC` = "#109618")) # interactive manhattan plot of enriched GO terms
 
 # save gost plot and table
 # publish_gostplot(
@@ -222,7 +221,7 @@ gostplot(gost.res.down, interactive = T, capped = F) # interactive manhattan plo
 
 
 # heatmaps
-myheatcolors <- rev(brewer.pal(name="RdBu", n=11))
+myheatcolors <- rev(brewer.pal(name="RdYlGn", n=11))
 module.color <- rainbow(length(unique(module.assign)), start=0.1, end=0.9) 
 module.color <- module.color[as.vector(module.assign)] 
 heatmap.2(diffGenes, 
@@ -232,11 +231,9 @@ heatmap.2(diffGenes,
           col=myheatcolors, scale='row', labRow=NA,
           density.info="none", trace="none",  
           cexRow=1, cexCol=1, margins=c(8,20))
+#"Spectral", 
 
-modulePick <- 2 
-myModule_up <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
 hrsub_up <- hclust(as.dist(1-cor(t(myModule_up), method="pearson")), method="complete") 
-
 heatmap.2(myModule_up, 
           Rowv=as.dendrogram(hrsub_up), 
           Colv=NA, 
@@ -245,10 +242,8 @@ heatmap.2(myModule_up,
           density.info="none", trace="none", 
           RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
 
-modulePick <- 1 
-myModule_down <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
-hrsub_down <- hclust(as.dist(1-cor(t(myModule_down), method="pearson")), method="complete") 
 
+hrsub_down <- hclust(as.dist(1-cor(t(myModule_down), method="pearson")), method="complete") 
 heatmap.2(myModule_down, 
           Rowv=as.dendrogram(hrsub_down), 
           Colv=NA, 
