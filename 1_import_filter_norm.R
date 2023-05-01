@@ -1,3 +1,4 @@
+
 # This script is for importing RNASeq data into R as well as filtering and normalizing it.
 
 Sys.unsetenv("R_LIBS_USER")
@@ -12,8 +13,7 @@ library(matrixStats)
 library(cowplot)
 
 # step 1
-
-# import ensembl annotations and format
+# ----------- Import and format data -----------------------------------------------------------------------------------------------
 myMart <- useMart(biomart="plants_mart", host="https://plants.ensembl.org") # marts for plant genomes
 cof.anno <- useMart(biomart="plants_mart", dataset = "ccanephora_eg_gene", host="https://plants.ensembl.org") # load ensembl annotations for c. canephora
 # listAttributes(cof.anno) 
@@ -38,23 +38,23 @@ Txi_gene <- tximport(path,
 
 
 
-# step 2: filter, normalize data and tidy up data
-
+# step 2
+# ----------- Filtering and normalization -----------------------------------------------------------------------------------------------
 # visualization of abundances
 myTPM <- Txi_gene$abundance
 myTPM.stats <- transform(myTPM, 
                          SD=rowSds(myTPM), 
                          AVG=rowMeans(myTPM),
                          MED=rowMedians(myTPM))
-ggplot(myTPM.stats) + 
-  aes(x = SD, y = MED) +
-  geom_smooth(method=lm) +
-  geom_hex(show.legend = T, bins=25) +
-  labs(y="Median", x = "Standard deviation",
-       title="Transcripts per million (TPM)",
-       subtitle="unfiltered, non-normalized data",
-       caption="DIYtranscriptomics - Spring 2020") +
-  theme_bw()
+# ggplot(myTPM.stats) + 
+#   aes(x = SD, y = MED) +
+#   geom_smooth(method=lm) +
+#   geom_hex(show.legend = T, bins=25) +
+#   labs(y="Median", x = "Standard deviation",
+#        title="Transcripts per million (TPM)",
+#        subtitle="unfiltered, non-normalized data",
+#        caption="DIYtranscriptomics - Spring 2020") +
+#   theme_bw()
 
 # looking at counts
 sampleLabels <- targets$sample
