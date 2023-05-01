@@ -2,37 +2,35 @@
 # This script is for clustering RNASeq data, identifying differentially expressed genes and preforming GO enrichment analysis.
 # Please run the import_filter_norm.R script BEFORE this one to ensure all necessary variables are defined.
 
-Sys.unsetenv("R_LIBS_USER")
-.libPaths(paste(getwd(), "temp/RLibrary", sep="/"))
 
 # load all required libraries
-library(tidyverse) # you're familiar with this from the past two lectures
-library(DT) # for making interactive tables
-library(plotly) # for making interactive plots
-library(gt) # A layered 'grammar of tables' - think ggplot, but for tables
-library(limma) # venerable package for differential gene expression using linear modeling
+library(tidyverse) # provides access to Hadley Wickham's collection of R packages for data science
+library(DT) # interactive tables
+library(plotly) # interactive plots
+library(gt) # A layered 'grammar of tables'
+library(limma) # package for differential gene expression using linear modeling
 library(edgeR) # package for differential expression analysis
 library(gplots) 
 library(gprofiler2) # tools for accessing the GO enrichment results using g:Profiler web resources
 library(RColorBrewer)
 
-# step 3
-# ----------- Hierarchical clustering -----------------------------------------------------------------------------------------------
-distance_euc <- dist(t(log2.cpm.filtered.norm), method = "euclidean") 
-clusters_euc <- hclust(distance_euc, method = "complete")
-c_euc <- plot(clusters_euc, labels=sampleLabels)
 
-distance_max <- dist(t(log2.cpm.filtered.norm), method = "maximum") 
-clusters_max <- hclust(distance_max, method = "complete") 
-c_max <- plot(clusters_max, labels=sampleLabels)
+# ----------- Hierarchical clustering -----------------------------------------------------------------------------------------------
+distance_euc <- dist(t(log2.cpm.filtered.norm), method = "euclidean")  # compute distances based on the normalized and filtered data
+clusters_euc <- hclust(distance_euc, method = "complete") # cluster the data based on distance
+c_euc <- plot(clusters_euc, labels=sampleLabels) # plot the dendrogram
+
+distance_max <- dist(t(log2.cpm.filtered.norm), method = "maximum") # compute distances based on the normalized and filtered data
+clusters_max <- hclust(distance_max, method = "complete") # cluster the data based on distance
+c_max <- plot(clusters_max, labels=sampleLabels) # plot the dendrogram
+
 
 # ----------- PCA -----------------------------------------------------------------------------------------------
-group <- targets$group
-group <- factor(group)
-pca.res <- prcomp(t(log2.cpm.filtered.norm), scale.=F, retx=T)
+group <- factor(targets$group)
+pca.res <- prcomp(t(log2.cpm.filtered.norm), scale.=F, retx=T) # preform PCA
 
 pc.per <- round((pca.res$sdev^2)/sum((pca.res$sdev^2))*100, 1) # the percentage variance explained by each PC (sdev^2 captures these eigenvalues from the PCA result)
-pc.per.df <- data.frame(PC= paste0("PC",1:8), pc.per)
+pc.per.df <- data.frame(PC= paste0("PC",1:8), pc.per) # frmat as a dataframe
 pc.per.df %>%
   ggplot(aes(x=PC,y=pc.per, group=1))+
   geom_point(size=8)+
@@ -42,9 +40,8 @@ pc.per.df %>%
   ylab("% of Variance Explained")
 
 
-colors <- c("green", "darkgreen") # Define the colors for each group
-#pca.res.df <- as_tibble(pca.res$x)
-pca.res.df <- pca.res$x[,1:4] %>% # note that this is the first time you've seen the 'pipe' operator from the magrittr package
+colors <- c("green", "darkgreen") # define the colors for each group
+pca.res.df <- pca.res$x[,1:4] %>% 
   as_tibble() %>%
   add_column(sample = sampleLabels,
              group = group)
@@ -55,10 +52,10 @@ pca.pivot <- pivot_longer(pca.res.df,
                           values_to = "loadings") 
 
 ggplot(pca.pivot) +
-  aes(x=sample, y=loadings, fill=group) + # you could iteratively 'paint' different covariates onto this plot using the 'fill' aes
+  aes(x=sample, y=loadings, fill=group) +
   geom_bar(stat="identity") +
   facet_wrap(~PC) +
-  scale_fill_manual(values = colors) + # Use the manual color scale
+  scale_fill_manual(values = colors) + # use a manual color scale
   labs(title="PCA 'small multiples' plot",
        caption=paste0("produced on ", Sys.time())) +
   theme_bw() +
@@ -68,7 +65,7 @@ pca.plot <- ggplot(pca.res.df) +
   aes(x=PC1, y=PC2, label=sampleLabels, color = group) +
   geom_point(size=4) +
   stat_ellipse() +
-  scale_color_manual(values = colors) + # Use the manual color scale
+  scale_color_manual(values = colors) + # use a manual color scale
   xlab(paste0("PC1 (",pc.per[1],"%",")")) + 
   ylab(paste0("PC2 (",pc.per[2],"%",")")) +
   labs(title="PCA plot",
@@ -79,49 +76,20 @@ pca.plot <- ggplot(pca.res.df) +
 ggplotly(pca.plot)
 
 
-# UMAP
-# library(findPC)
-# library(uwot)
-# library(ggplot2)
-# 
-# findPC(sdev = pca.res$sdev, number = 8,
-#        method = "all", figure = TRUE)
-# # suggests 2 PCs
-# 
-# cof.umap <- umap(X = pca.res$rotation[,1:2], n_threads = 2, n_neighbors = 4)
-# 
-# cof.umap.plot <- ggplot(data = data.frame(
-#   #sample = log2.cpm.filtered.norm.df.pivot$samples,
-#   x = cof.umap[,1],
-#   y = cof.umap[,2])) +
-#   aes(x = x, y = y, text = paste("Symbol:", rownames(cof.umap))) +
-#   geom_point(aes(x = x, y = y)) #, color = sample))
-# 
-# cof.umap.plot
-  #scale_color_manual(values = c("red", "darkred", "orange", "darkorange", "blue", "darkblue", "green", "darkgreen"))
-  #scale_color_manual(values = c("orange", "orange", "orange", "orange", "darkblue", "darkblue", "darkblue", "darkblue"))
-
-# ggplotly(cof.umap.plot)
-
-
-
 # ----------- Gene expression averages -----------------------------------------------------------------------------------------------
-mydata.df <- mutate(log2.cpm.filtered.norm.df,
-                    leaf.AVG = (L42 + L41 + L32 + L31)/4, 
-                    stem.AVG = (S42 + S41 + S32 + S31)/4,
-                    #now make columns comparing each of the averages above that you're interested in
-                    LogFC = (stem.AVG - leaf.AVG)) %>% #note that this is the first time you've seen the 'pipe' operator
-  mutate_if(is.numeric, round, 2)
-
+mydata.df <- mutate(log2.cpm.filtered.norm.df, 
+                    leaf.AVG = (L42 + L41 + L32 + L31)/4, # calculate averages for leaf
+                    stem.AVG = (S42 + S41 + S32 + S31)/4, # calculate averages for stem
+                    LogFC = (stem.AVG - leaf.AVG)) %>% # create columns comparing each of the averages above
+             mutate_if(is.numeric, round, 2)
 write_tsv(mydata.df[,c(1,10:12)], "avg.tsv")
-datatable(mydata.df[,c(1,10:12)], 
+
+datatable(mydata.df[,c(1,10:12)], # view as a table
           extensions = c('KeyTable', "FixedHeader"), 
           filter = 'top',
           options = list(keys = TRUE, 
                          searchHighlight = TRUE, 
                          pageLength = 10, 
-                         #dom = "Blfrtip", 
-                         #buttons = c("copy", "csv", "excel"),
                          lengthMenu = c("10", "25", "50", "100")))
 
 myplot <- ggplot(mydata.df) +
@@ -134,30 +102,28 @@ myplot <- ggplot(mydata.df) +
 ggplotly(myplot)
 
 
-# step 4
-# ----------- Identification of differentially expressed genes (DEGs) -----------------------------------------------------------------------------------------------
-
+# ----------- Identification of differentially expressed genes (DEGs) --------------------------------------------------------------------------------------------
 group <- factor(targets$group)
-design <- model.matrix(~0 + group)
+design <- model.matrix(~0 + group) # create a design matrix based on the tissues
 colnames(design) <- levels(group)
 
-# Model mean-variance trend and fit linear model to data
 v.DEGList.filtered.norm <- voom(myDGEList.filtered.norm, design, plot = FALSE) # model the mean-variance relationship
-fit <- lmFit(v.DEGList.filtered.norm, design) # fit a linear model to your data
-contrast.matrix <- makeContrasts(differance = stem - leaf,
+fit <- lmFit(v.DEGList.filtered.norm, design) # fit a linear model to the data
+contrast.matrix <- makeContrasts(differance = stem - leaf, # create a contrast matrix based on the tissue differences
                                  levels=design)
 
 fits <- contrasts.fit(fit, contrast.matrix) # extract the linear model fit
-ebFit <- eBayes(fits) # get bayesian stats for your linear model fit
-# write.fit(ebFit, file="lmfit_results.txt")
+ebFit <- eBayes(fits) # get bayesian stats for the linear model fit
+write.fit(ebFit, file="lmfit_results.txt")
 
-# TopTable to view DEGs
-myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=18668, sort.by="logFC")
+# View DEGs
+myTopHits <- topTable(ebFit, adjust ="BH", coef=1, number=18668, sort.by="logFC") # number is set to all DEGs
 myTopHits.df <- myTopHits %>% as_tibble(rownames = "geneID")
 myTopHitsgt <- data.frame(gt(myTopHits.df))
-# write_tsv(myTopHitsgt,"myTopHits.txt")
+write_tsv(myTopHitsgt,"myTopHits.txt")
 
-vplot <- ggplot(myTopHits) +
+# creates a volcano plot of the DEGs
+vplot <- ggplot(myTopHits) + 
   aes(y=-log10(adj.P.Val), x=logFC, text = paste("Symbol:", rownames(myTopHits))) +
   geom_point(size=2) +
   geom_hline(yintercept = -log10(0.01), linetype="longdash", colour="grey", linewidth=1) +
@@ -172,11 +138,12 @@ vplot <- ggplot(myTopHits) +
 
 ggplotly(vplot)
 
-results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05, lfc=1) # output -1 or 1: t-statistic for gene is classified as significant
+results <- decideTests(ebFit, method="global", adjust.method="BH", p.value=0.05, lfc=1) # output -1 or 1: t-statistic for gene is classified as significant (0 = not significant)
 colnames(v.DEGList.filtered.norm$E) <- sampleLabels
-diffGenes <- v.DEGList.filtered.norm$E[results[,1] !=0,] # E = numeric matrix of normalized expression values on the log2 scale
+diffGenes <- v.DEGList.filtered.norm$E[results[,1] !=0,] # E: numeric matrix of normalized expression values on the log2 scale
 diffGenes.df <- as_tibble(diffGenes, rownames = "geneID")
-# write_tsv(diffGenes.df,"DiffGenes.tsv")
+write_tsv(diffGenes.df,"DiffGenes.tsv")
+
 datatable(diffGenes.df,
           extensions = c('KeyTable', "FixedHeader"),
           caption = 'Table 1: DEGs in c. canephora',
@@ -184,93 +151,86 @@ datatable(diffGenes.df,
   formatRound(columns=c(2:9), digits=2)
 
 
-# step 5
 # ----------- Gene Ontology (GO) enrichment using gProfiler2 -----------------------------------------------------------------------------------------------
-
-# using myTopHits
-myTop100Hits <- topTable(ebFit, adjust ="BH", coef=1, number=100, sort.by="logFC") # pick the top genes for carrying out GO enrichment analysis
-
-# myTop5Hits_logFC <- topTable(ebFit, adjust ="BH", coef=1, number=5, sort.by="logFC")
-# myTop5Hits_logFC
-
+myTop100Hits <- topTable(ebFit, adjust ="BH", coef=1, number=100, sort.by="logFC") # pick the top 100 genes by logFC value for carrying out GO enrichment analysis
 gost.res <- gost(rownames(myTop100Hits), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
-gostplot(gost.res, interactive = T, capped = F) #, c(`GO:MF` = "darkgreen", `GO:BP` = "green", `GO:CC` = "#109618")) # interactive manhattan plot of enriched GO terms
+gostplot(gost.res, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
 
-# save gost plot and table
-# publish_gostplot(
-#    gostplot(gost.res, interactive = F, capped = F), # static gostplot
-#    highlight_terms = c("GO:0005975", "GO:0048046", "GO:0030145", "GO:0003824", "GO:0045735"), # highlight top 7 lowest p-values
-#    filename = "gostplot100.png",
-#    width = NA,
-#    height = NA)
-# 
-# publish_gosttable(
-#    gost.res$result[order(gost.res$result$p_value, decreasing = F),],
-#    highlight_terms = NULL,
-#    use_colors = TRUE,
-#    show_columns = c("source", "term_name", "term_size", "intersection_size"),
-#    filename = "gosttable100.pdf",
-#    ggplot=TRUE)
+#save gost plot and table
+publish_gostplot(
+   gostplot(gost.res, interactive = F, capped = F), # static gostplot
+   highlight_terms = c("GO:0005975", "GO:0048046", "GO:0030145", "GO:0003824", "GO:0045735"), # highlight top 7 lowest p-values
+   filename = "gostplot100.png",
+   width = NA,
+   height = NA)
 
+publish_gosttable(
+   gost.res$result[order(gost.res$result$p_value, decreasing = F),],
+   highlight_terms = NULL,
+   use_colors = TRUE,
+   show_columns = c("source", "term_name", "term_size", "intersection_size"),
+   filename = "gosttable100.pdf",
+   ggplot=TRUE)
 
-# step X
-
+# create tissue modules based on pearson correlation
 clustRows <- hclust(as.dist(1-cor(t(diffGenes), method="pearson")), method="complete") # cluster rows by pearson correlation
-clustColumns <- hclust(as.dist(1-cor(diffGenes, method="spearman")), method="complete")
-module.assign <- cutree(clustRows, k=2) # assign 
+clustColumns <- hclust(as.dist(1-cor(diffGenes, method="spearman")), method="complete") # cluster columns by pearson correlation
+module.assign <- cutree(clustRows, k=2) 
 
-modulePick <- 2 
-myModule_leaf <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
-length(rownames(myModule_leaf)) # 3355
+modulePick <- 2 # pick the leaf module
+myModule_leaf <- diffGenes[names(module.assign[module.assign %in% modulePick]),]
+length(rownames(myModule_leaf))
 
 gost.res.leaf <- gost(rownames(myModule_leaf), organism = "ccanephora", correction_method = "fdr") # run GO enrichment analysis
-gostplot(gost.res.leaf, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
+gostplot(gost.res.leaf, interactive = T, capped = F) # interactive Manhattan plot of enriched GO terms
 
 # save gost plot and table
-# publish_gostplot(
-#   gostplot(gost.res.leaf, interactive = F, capped = F), # static gostplot
-#   highlight_terms = c("GO:0009536", "GO:0009579", "GO:0009507", "GO:0015979", "GO:0034357"), # highlight top 5
-#   filename = "gostplot_leaf.png",
-#   width = NA,
-#   height = NA)
-# 
-# publish_gosttable(
-#   gost.res.leaf$result[order(gost.res.leaf$result$p_value, decreasing = F),],
-#   highlight_terms = NULL,
-#   use_colors = TRUE,
-#   show_columns = c("source", "term_name", "term_size", "intersection_size"),
-#   filename = "gosttable_leaf.pdf",
-#   ggplot=TRUE)
+publish_gostplot(
+  gostplot(gost.res.leaf, interactive = F, capped = F), # static gostplot
+  highlight_terms = c("GO:0009536", "GO:0009579", "GO:0009507", "GO:0015979", "GO:0034357"), # highlight top 5
+  filename = "gostplot_leaf.png",
+  width = NA,
+  height = NA)
 
-modulePick <- 1 
+publish_gosttable(
+  gost.res.leaf$result[order(gost.res.leaf$result$p_value, decreasing = F),],
+  highlight_terms = NULL,
+  use_colors = TRUE,
+  show_columns = c("source", "term_name", "term_size", "intersection_size"),
+  filename = "gosttable_leaf.pdf",
+  ggplot=TRUE)
+
+
+modulePick <- 1 # pick the stem module
 myModule_stem <- diffGenes[names(module.assign[module.assign %in% modulePick]),] 
-length(rownames(myModule_stem)) # 3530
+length(rownames(myModule_stem))
 
 gost.res.stem <- gost(rownames(myModule_stem), organism = "ccanephora", ordered_query = T, correction_method = "fdr") # run GO enrichment analysis
-gostplot(gost.res.stem, interactive = T, capped = F) # interactive manhattan plot of enriched GO terms
+gostplot(gost.res.stem, interactive = T, capped = F) # interactive Manhattan plot of enriched GO terms
 
 # save gost plot and table
-# publish_gostplot(
-#    gostplot(gost.res.stem, interactive = F, capped = F), # static gostplot
-#    highlight_terms = c("GO:0008017", "GO:0015631", "GO:0008092", "GO:0003777", "GO:0003774"), # highlight top 7
-#    filename = "gostplot_stem.png",
-#    width = NA,
-#    height = NA)
-# 
-# publish_gosttable(
-#    gost.res.stem$result[order(gost.res.stem$result$p_value, decreasing = F),],
-#    highlight_terms = NULL,
-#    use_colors = TRUE,
-#    show_columns = c("source", "term_name", "term_size", "intersection_size"),
-#    filename = "gosttable_stem.pdf",
-#    ggplot= T)
+publish_gostplot(
+   gostplot(gost.res.stem, interactive = F, capped = F), # static gostplot
+   highlight_terms = c("GO:0008017", "GO:0015631", "GO:0008092", "GO:0003777", "GO:0003774"), # highlight top 7
+   filename = "gostplot_stem.png",
+   width = NA,
+   height = NA)
 
+publish_gosttable(
+   gost.res.stem$result[order(gost.res.stem$result$p_value, decreasing = F),],
+   highlight_terms = NULL,
+   use_colors = TRUE,
+   show_columns = c("source", "term_name", "term_size", "intersection_size"),
+   filename = "gosttable_stem.pdf",
+   ggplot= T)
 
 
 # ----------- Heatmaps -----------------------------------------------------------------------------------------------
-myheatcolors <- rev(brewer.pal(name="Spectral", n=11))
+myheatcolors <- rev(brewer.pal(name="Spectral", n=11)) # define a color palette
 module.color <- rainbow(length(unique(module.assign)), start=0.3, end=0.2) 
-module.color <- module.color[as.vector(module.assign)] 
+module.color <- module.color[as.vector(module.assign)] # assign module colors
+
+# generate a heatmap for all DEGs
 heatmap.2(diffGenes, 
           Rowv=as.dendrogram(clustRows), 
           Colv=as.dendrogram(clustColumns),
@@ -279,6 +239,7 @@ heatmap.2(diffGenes,
           density.info="none", trace="none",  
           cexRow=1, cexCol=1, margins=c(8,20))
 
+# generate a heatmap for the leaf module
 modulePick <- 2 
 hrsub_leaf <- hclust(as.dist(1-cor(t(myModule_leaf), method="pearson")), method="complete") 
 heatmap.2(myModule_leaf, 
@@ -289,6 +250,7 @@ heatmap.2(myModule_leaf,
           density.info="none", trace="none", 
           RowSideColors=module.color[module.assign%in%modulePick], margins=c(8,20))
 
+# generate a heatmap for the stem module
 modulePick <- 1
 hrsub_stem <- hclust(as.dist(1-cor(t(myModule_stem), method="pearson")), method="complete") 
 heatmap.2(myModule_stem, 
